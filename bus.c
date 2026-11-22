@@ -1,67 +1,28 @@
 /*
 bus that's goal is to go to the train station, pick persons, and go back
 */
+#include "bus.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdio.h> 
-#include <netdb.h> 
-#include <netinet/in.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include <sys/socket.h> 
-#include <sys/types.h> 
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <time.h> 
-
-#define SERVER_IP "127.0.0.1"
-#define PORT_UDP 6001
-#define PORT_TCP 6000
-#define BUFFER_SIZE 1024
-#define N_PLACE_IN_BUS 30
-
-#define CODE_ASK_E '1' // ask to enter
-#define CODE_ASK_O '2' // ask to leave
-#define CODE_ACK_O '3' // can leave
-#define CODE_FIN_O '4' // can leave
-
-struct Bus {
-    float t_from_station; // time from station
-
-    int type; /* 0, 1, 2 (V, A, P)*/
-    int plate; /* plate number [0, 1000]*/
-    int priority; /* higher = more priority */
-
-    int n_pers;
-    float predicted_station_time;
-};
-
-
-int main() {
+int start_bus(struct Bus b) {
 
     printf("LOG-BUS: Bus started\n");
 
-    // --- Create random bus
-    struct Bus b = {
-        (rand() % 1000) / 100.0f, // time from station [0, 10]seconfs
-        rand() % 3,
-        rand() % 1000,
-        rand() % 50,
-        rand() % N_PLACE_IN_BUS,
-        (rand() % 1000) / 100.0f
-    };
-
     // --- send info to serv
-    printf("LOG-BUS: sending udp info to serv\n");
+    printf("LOG-BUS: sending udp info to serv %s:%d\n", SERVER_IP, PORT_UDP);
     struct sockaddr_in addr_udp = {0};
     addr_udp.sin_family = AF_INET;
     if (inet_pton(AF_INET, SERVER_IP, &addr_udp.sin_addr) <= 0 ) {perror("err ip addr");}
     addr_udp.sin_port = htons(PORT_UDP);
 
     int sfd_udp = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sfd_udp < 0) {
+        perror("socket creation failed");
+    }
+
     while (b.t_from_station > 0.0) {    
-        if (sendto(sfd_udp, &b, sizeof(b), 0, (struct sockaddr *)&addr_udp, sizeof(addr_udp)) < 0) {perror("error sending udp");}  
+        int id = b.id;
+        if (sendto(sfd_udp, &id, sizeof(int), 0, 
+            (struct sockaddr *)&addr_udp, sizeof(addr_udp)) < 0) {perror("error sending udp");}  
               
         // wait 1 sec
         sleep(1);
@@ -77,24 +38,26 @@ int main() {
     addr_tcp.sin_port = htons(PORT_TCP);
 
     int sfd_tcp = socket(AF_INET, SOCK_STREAM, 0);
+    if (sfd_tcp < 0) {
+        perror("socket creation failed");
+    }
 
     if (connect(sfd_tcp, (const struct sockaddr *) &addr_tcp, sizeof(addr_tcp)) < 0) {perror("err connecting tcp addr");}
-    char msg = CODE_ASK_E;
-    if (send(sfd_tcp, &msg, sizeof(msg), 0) < 0)  {perror("err sending tcp");}
+    if (send(sfd_tcp, &b.id, sizeof(int), 0) < 0)  {perror("err sending tcp");}
 
     printf("LOG-BUS: wainting to receive the dock number\n");
     ssize_t s;
-    int buffer[BUFFER_SIZE] = {0};
+    char buffer[BUFFER_SIZE] = {0};
     do {
         s = recv(sfd_tcp, buffer, BUFFER_SIZE, 0);
     } while(s < 0);
 
-    int dock_n = buffer[0];
+    int dock_n = atoi(buffer);
     int time_to_dock = rand() % 5;
 
     // --- Go to dock
     printf("LOG-BUS: go to the dock %d\n", dock_n);
-    while (time_to_dock < 0) {
+    while (time_to_dock > 0) {
         sleep(1);
         time_to_dock -= 1;
     }
@@ -108,7 +71,7 @@ int main() {
     // --- Ask to leave
     printf("LOG-BUS: ask to leave\n");
 
-    msg = CODE_ASK_O;
+    char msg = CODE_ASK_O;
     if (send(sfd_tcp, &msg, sizeof(msg), 0) < 0)  {perror("err sending tcp 2");}
 
     // --- Wait response
