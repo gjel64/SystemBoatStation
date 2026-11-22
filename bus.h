@@ -1,3 +1,5 @@
+#ifndef BUS_H
+#define BUS_H
 
 #define SERVER_IP "127.0.0.1"
 #define PORT_UDP 6001
@@ -41,3 +43,5 @@ struct Bus {
 
 
 int start_bus(struct Bus b);
+
+#endif /* BUS_H */

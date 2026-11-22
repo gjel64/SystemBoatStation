@@ -4,47 +4,14 @@ goal :
     - start regulator
     - keep a register of bus (shared memory)
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdio.h> 
-#include <netdb.h> 
-#include <netinet/in.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include <sys/socket.h> 
-#include <sys/types.h> 
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <time.h> 
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <pthread.h>
-
-#include "bus.h"
-
-#define SHM_NAME "/bus_shm"
-
-#define MAX_DOCKER 10
-#define MAX_BUS MAX_DOCKER*3*2 
-
-struct Register {
-    pthread_mutex_t mutex;
-
-    struct Bus buses[MAX_BUS];
-
-    int n_dockers[3]; /* [A, P, V]  */ // how many dockers for each type
-    int dockers[3][MAX_DOCKER];        // bus idx for every docker
-
-    int next_id; // next id to assign to a bus
-
-};
+#include "docker.h"
 
 pid_t new_bus(struct Register *shm_ptr) {
     // --- Create random bus
     pthread_mutex_lock(&shm_ptr->mutex);
     shm_ptr->next_id++;
     int id = shm_ptr->next_id;
+    shm_ptr->n_bus++;
     pthread_mutex_unlock(&shm_ptr->mutex);
     struct Bus b = {
         id,
@@ -79,13 +46,6 @@ int main() {
     reg->n_dockers[1] = 7;
     reg->n_dockers[2] = 10;
     reg->next_id = 1;
-    // init mutex
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-
-    pthread_mutex_init(&reg->mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
 
     // --- Create shared memory
     int sh_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
@@ -95,9 +55,17 @@ int main() {
 
     struct Register *shm_ptr = mmap(0, sizeof(struct Register), PROT_READ | PROT_WRITE, MAP_SHARED, sh_fd, 0);
     if (shm_ptr == MAP_FAILED) { perror("err mmap"); }
-    pthread_mutex_lock(&shm_ptr->mutex);
+    //pthread_mutex_lock(&shm_ptr->mutex);
     memcpy(shm_ptr, reg, sizeof(struct Register));
-    pthread_mutex_unlock(&shm_ptr->mutex);
+    //pthread_mutex_unlock(&shm_ptr->mutex);
+
+    // init mutex
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&shm_ptr->mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
 
     free(reg);
     // --- Create regulator

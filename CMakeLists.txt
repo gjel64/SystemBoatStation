@@ -16,3 +16,7 @@ target_link_libraries(docker PRIVATE bus Threads::Threads)
 
 # Screen
 add_executable(screen screen.c)
+
+# Controller (reads the register)
+add_executable(controller controller.c)
+target_link_libraries(controller PRIVATE bus Threads::Threads)
